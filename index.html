@@ -19,7 +19,8 @@
   @keyframes aparece { from { opacity:0; scale:.2; } to { opacity:1; scale:1; } }
   .print { margin:0; background:#fff; padding:8px; box-shadow:0 6px 18px rgba(43,75,181,.28); }
   .print img { display:block; background:#c9cfe6; object-fit:cover; }
-  .item.nueva .print { outline:4px solid var(--red); outline-offset:6px; }
+  .item.nueva .print { outline:4px solid var(--red); outline-offset:6px; animation:resalta 4s ease-out forwards; }
+  @keyframes resalta { 0%,60% { outline-color:var(--red); } 100% { outline-color:transparent; } }
   .postit { position:absolute; right:-26px; bottom:-30px; width:118px; height:118px; padding:10px; background:var(--pc,#ffe27a); box-shadow:0 5px 12px rgba(43,75,181,.3); transform:rotate(var(--pr,4deg)); overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; font-family:var(--hand); color:#1d2a63; }
   .postit p { margin:0; font-size:1.2rem; line-height:1.05; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; }
   .postit small { font-size:.95rem; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -179,7 +180,7 @@ function render(modo) {
     if (!n) {
       n = crear(f); nodos.set(f.id, n); stage.appendChild(n);
       if (modo === "inicial") n.style.setProperty("--d", Math.min(i * 60, 4500) + "ms");
-      else n.classList.add("nueva");
+      else { n.classList.add("nueva"); setTimeout(() => n.classList.remove("nueva"), 4500); }
     }
     const [x, y] = pos(i), h = hash(f.id);
     n.style.left = x + "px"; n.style.top = y + "px";
@@ -277,7 +278,11 @@ async function comprobar(r) {
     throw new Error(m);
   }
   const j = await r.json();
-  if (!j.length) throw new Error("Sin permiso: solo el administrador puede hacer esto.");
+  if (!j.length) {
+    let mail = "desconocido";
+    try { mail = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || mail; } catch {}
+    throw new Error(`Supabase no lo permitió. Sesión: ${mail}. Ese correo debe coincidir exactamente con el de las políticas.`);
+  }
 }
 $("guardar").onclick = async () => {
   try {
