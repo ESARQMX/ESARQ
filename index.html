@@ -52,6 +52,9 @@
   dialog textarea { height:88px; resize:none; font-family:var(--hand); font-size:1.3rem; line-height:1.1; }
   .fila { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
   .ayuda { font-size:.8rem; opacity:.75; margin:4px 0 0; }
+  .colores { display:flex; gap:8px; margin-top:4px; }
+  .colores button { width:32px; height:32px; padding:0; border-radius:50%; border:3px solid transparent; background:var(--c); cursor:pointer; box-shadow:0 0 0 1px rgba(43,75,181,.35); }
+  .colores button.sel { border-color:var(--blue); }
 
   #lb { position:fixed; inset:0; background:rgba(31,52,140,.93); display:none; place-items:center; z-index:10; cursor:zoom-out; padding:14px; overflow:auto; }
   #lb.abierto { display:grid; }
@@ -98,6 +101,8 @@
   <input id="archivos" type="file" accept="image/*" multiple>
   <label for="nota">Nota (máx. 80 caracteres)</label>
   <textarea id="nota" maxlength="80" placeholder="Escribe algo corto…"></textarea>
+  <label>Color del post-it</label>
+  <div class="colores" id="coloresNota"></div>
   <p class="ayuda">Si subes varias fotos, la nota acompaña a la primera.</p>
   <label for="autor">Tu nombre (opcional)</label>
   <input id="autor" maxlength="24">
@@ -119,6 +124,7 @@
     <div id="lbNota"></div>
     <div id="adminBox">
       <textarea id="notaEdit" maxlength="80" placeholder="Nota (vacía = sin nota)"></textarea>
+      <div class="colores" id="coloresEdit"></div>
       <div class="fila"><button class="btn" id="eliminar" type="button">Eliminar</button><button class="btn rojo" id="guardar" type="button">Guardar nota</button></div>
     </div>
   </div>
@@ -150,7 +156,7 @@ function aviso(txt, ms) {
 /* ---------- Espiral: la primera foto al centro, las demás hacia afuera ---------- */
 let items = [], firma = "";
 const nodos = new Map();
-const COLORES = ["#ffe27a", "#ffb8a8", "#bccaf7"];
+const COLORES = ["#ffe27a", "#ffb8a8", "#bccaf7", "#b9e5c4", "#e9c9f2"]; // amarillo, coral, azul, verde, lila
 const hash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
 function pos(i) {
   if (i === 0) return [0, 0];
@@ -194,7 +200,7 @@ function render(modo) {
     }
     const pc = n.querySelector(".postit");
     pc.style.display = f.nota ? "flex" : "none";
-    pc.style.setProperty("--pc", COLORES[h % 3]);
+    pc.style.setProperty("--pc", COLORES.includes(f.color) ? f.color : COLORES[h % COLORES.length]);
     pc.style.setProperty("--pr", ((h % 9) - 4) + "deg");
     pc.querySelector("p").textContent = f.nota || "";
     pc.querySelector("small").textContent = f.autor ? "— " + f.autor : "";
@@ -210,7 +216,7 @@ async function listar() {
 }
 async function sincronizar(inicial) {
   const lista = await listar();
-  const f = JSON.stringify(lista.map((x) => [x.id, x.nota, x.autor]));
+  const f = JSON.stringify(lista.map((x) => [x.id, x.nota, x.autor, x.color]));
   if (f === firma) return;
   firma = f; items = lista; render(inicial ? "inicial" : "nuevo");
   if (inicial) ajustar();
@@ -265,7 +271,7 @@ stage.addEventListener("click", (e) => {
   const t = [actual.nota, actual.autor ? "— " + actual.autor : ""].filter(Boolean).join("  ");
   $("lbNota").textContent = t; $("lbNota").style.display = t ? "block" : "none";
   $("adminBox").style.display = token ? "flex" : "none";
-  $("notaEdit").value = actual.nota || "";
+  $("notaEdit").value = actual.nota || ""; marcar("coloresEdit", actual.color);
   lb.classList.add("abierto");
 });
 lb.addEventListener("click", (e) => { if (e.target === lb) lb.classList.remove("abierto"); });
@@ -286,7 +292,7 @@ async function comprobar(r) {
 }
 $("guardar").onclick = async () => {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${actual.id}`, { method: "PATCH", headers: hdr({ "Content-Type": "application/json", Prefer: "return=representation" }), body: JSON.stringify({ nota: $("notaEdit").value.trim().slice(0, MAX_NOTA) || null }) });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${actual.id}`, { method: "PATCH", headers: hdr({ "Content-Type": "application/json", Prefer: "return=representation" }), body: JSON.stringify({ nota: $("notaEdit").value.trim().slice(0, MAX_NOTA) || null, color: $("coloresEdit").dataset.val || null }) });
     await comprobar(r); lb.classList.remove("abierto"); aviso("Nota guardada", 2500); sincronizar(false);
   } catch (e) { aviso(e.message, 6000); }
 };
@@ -314,6 +320,20 @@ $("entrar").onclick = async () => {
     $("clave").value = ""; $("dAdmin").close(); pintarAdmin(); aviso("Modo administrador activo: toca una publicación para editarla o eliminarla", 5000);
   } catch (e) { aviso("No se pudo entrar: " + e.message, 6000); }
 };
+
+/* ---------- Selector de color del post-it ---------- */
+function selector(id) {
+  const c = $(id);
+  COLORES.forEach((col) => {
+    const b = document.createElement("button"); b.type = "button"; b.style.setProperty("--c", col); b.setAttribute("aria-label", "Color " + col);
+    b.onclick = () => marcar(id, col); c.appendChild(b);
+  });
+}
+function marcar(id, val) {
+  const c = $(id); c.dataset.val = val || "";
+  [...c.children].forEach((b, i) => b.classList.toggle("sel", COLORES[i] === val));
+}
+selector("coloresNota"); selector("coloresEdit"); marcar("coloresNota", COLORES[0]);
 
 /* ---------- Subida ---------- */
 function reducir(file, lado, calidad) {
@@ -348,7 +368,7 @@ $("publicar").onclick = async () => {
   for (let i = 0; i < trabajos.length; i++) {
     aviso(`Subiendo ${i + 1} de ${trabajos.length}…`);
     try {
-      const fila = { autor: autor || null, nota: i === 0 ? nota || null : null };
+      const fila = { autor: autor || null, nota: i === 0 ? nota || null : null, color: i === 0 && nota ? $("coloresNota").dataset.val || null : null };
       if (trabajos[i]) {
         const g = await reducir(trabajos[i], MAX_LADO, 0.82), m = await reducir(trabajos[i], MINIATURA, 0.75);
         const path = Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".jpg";
